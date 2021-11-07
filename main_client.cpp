@@ -310,6 +310,68 @@ int main(int argc,char *argv[])
             }
         }
         else
+        if(command[0]=="upload_file")
+        {
+            if(online==0)
+            {
+                cout<<"You are not logged in,Please login.\n";
+            }
+            else
+            if(command.size()!=3)
+            {
+                cout<<"Invalid arguments\n";
+            }
+            else
+            {
+                strcpy(buffer,(inp+" "+id+" "+my_ip+" "+my_port).c_str());
+                int n=write(sockfd,buffer,strlen(buffer));
+                if (n < 0) 
+                {
+                    perror("Error while writing to socket.\n");
+                    exit(0);
+                }
+                bzero(buffer,1024);
+                n=read(sockfd,buffer,1024);
+                if(n<0) 
+                {
+                    perror("Error while reading from socket\n");
+                    exit(0);
+                }
+                printf("Msg from Server:%s\n",buffer);
+            }
+        }
+        else
+        if(command[0]=="download_file")
+        {
+            if(online==0)
+            {
+                cout<<"You are not logged in,Please login.\n";
+            }
+            else
+            if(command.size()!=4)
+            {
+                cout<<"Invalid arguments\n";
+            }
+            else
+            {
+                strcpy(buffer,(inp+" "+id).c_str());
+                int n=write(sockfd,buffer,strlen(buffer));
+                if (n < 0) 
+                {
+                    perror("Error while writing to socket.\n");
+                    exit(0);
+                }
+                bzero(buffer,1024);
+                n=read(sockfd,buffer,1024);
+                if(n<0) 
+                {
+                    perror("Error while reading from socket\n");
+                    exit(0);
+                }
+                printf("Msg from Server:%s\n",buffer);
+            }
+        }
+        else
         {
             int n=write(sockfd,buffer,strlen(buffer));
             if(n<0) 

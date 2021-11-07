@@ -11,6 +11,7 @@ unordered_map<string,pair<string,pair<string,bool>>> user;//user[id]={pswd,{gid,
 unordered_map<string,set<string>> group;//group[gid]={uid1,uid2...}
 unordered_map<string,string> admin;//admin[groupid]=admin_uid
 unordered_map<string,set<string>> requests;
+unordered_map<string,pair<pair<string,string>,pair<string,string>>> file_details;//file[filename]={{filepath,groupid},{ip,port}}
 string process_command(vector<string> command)
 {
     if(command[0]=="create_user"&&command.size()==3)
@@ -178,13 +179,71 @@ string process_command(vector<string> command)
     }
     else
     if(command[0]=="list_files"&&command.size()==2)
-    {}
+    {
+        if(group.find(command[1])==group.end())
+        return "Group does not exist.";
+        string ans="\n|FileName|\n";
+        if(file_details.size()==0)
+        return "No files uploaded in this group.";
+        bool check=false;
+        for(auto i=file_details.begin();i!=file_details.end();i++)
+        {
+            string key=(*i).first;
+            if(file_details[key].first.second==command[1])
+            {
+                check=true;
+                ans+=key+'\n';
+            }
+        }
+        if(!check)
+        return "No files uploaded in this group.";
+        return ans;
+    }
     else
-    if(command[0]=="upload_file"&&command.size()==3)
-    {}
+    if(command[0]=="upload_file"&&command.size()==6)// upload_file <filepath> <gid> <uid> <ip> <port>
+    {
+        if(group.find(command[2])==group.end())
+        return "Group does not exist.";
+        else
+        if(group[command[2]].find(command[3])==group[command[2]].end())
+        return "You are not a part of this group,Please joing before uploading this file.";
+        else
+        {
+            string filepath=command[1];
+            string filename="";
+            bool isCorrect=false;
+            for(int i=filepath.length()-1;i>=0;i--)
+            {
+                if(filepath[i]=='/')
+                {
+                    isCorrect=true;
+                    break;
+                }
+                filename.insert(0,1,filepath[i]);
+            }
+            if(!isCorrect)
+            return "Incorrect Filename/path.";
+            file_details[filename].first.first=filename;
+            file_details[filename].first.second=command[2];
+            file_details[filename].second.first=command[4];
+            file_details[filename].second.second=command[5];
+            cout<<"<UPLOAD> IP:PORT"+command[4]+":"+command[5]<<endl;
+            return "File:"+filename+" uploaded successfully to Group:"+command[2];
+        }
+    }
     else
-    if(command[0]=="download_file"&&command.size()==4)
-    {}
+    if(command[0]=="download_file"&&command.size()==5)
+    {
+        if(group.find(command[1])==group.end())
+        return "Group does not exist.";
+        if(group[command[1]].find(command[4])==group[command[1]].end())
+        return "You do not belong to Group:"+command[1];
+        if(file_details.find(command[2])==file_details.end())
+        return "File not found.";
+        if(file_details[command[2]].first.second!=command[1])
+        return "File does not belong to Group:"+command[1];
+        return file_details[command[2]].second.first+":"+file_details[command[2]].second.second;
+    }
     else
     if(command[0]=="logout"&&command.size()==2)
     {
