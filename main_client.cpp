@@ -10,6 +10,9 @@
 #include<netdb.h> //gethostbyname()
 using namespace std;
 string id="",pswd="",group="";
+string my_ip="",my_port="";
+string tracker_ip="",tracker_port="";
+unordered_map<string,string> file; //filename->path
 int online=0;
 
 void print_trackers(vector<pair<string,string>> trackers)
@@ -45,27 +48,28 @@ int main(int argc,char *argv[])
         }
         trackers.push_back({ip,port});
     }
-
-    string ip_str="",port_str="";
+    tracker_ip=trackers[0].first;
+    tracker_port=trackers[0].second;
+    
     word=argv[1];
     for(int i=0;i<word.length();i++)
     {
         if(word[i]==':')
         {
-            ip_str=port_str;
-            port_str="";
+            my_ip=my_port;
+            my_port="";
             continue;
         }
-        port_str.push_back(word[i]);
+        my_port.push_back(word[i]);
     }
-    cout<<"IP:PORT->"<<ip_str<<":"<<port_str<<endl;
+    cout<<"My IP:PORT->"<<my_ip<<":"<<my_port<<endl;
     int sockfd = socket(AF_INET, SOCK_STREAM, 0); //Socket Creation
     if(sockfd<0)
     {
         perror("Error while opening socket.\n");
         exit(0);
     }
-    struct hostent *server=gethostbyname(ip_str.c_str());
+    struct hostent *server=gethostbyname(tracker_ip.c_str());
     if(server==NULL) 
     {
         perror("Error,Host not found.\n");
@@ -75,7 +79,7 @@ int main(int argc,char *argv[])
     bzero((char *) &serv_addr,sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     bcopy((char *)server->h_addr,(char *)&serv_addr.sin_addr.s_addr,server->h_length);
-    serv_addr.sin_port = htons(stoi(port_str));
+    serv_addr.sin_port = htons(stoi(tracker_port));
     if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr))<0) 
     {
         perror("ERROR connecting");
