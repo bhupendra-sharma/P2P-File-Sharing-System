@@ -242,7 +242,7 @@ string process_command(vector<string> command)
         return "File not found.";
         if(file_details[command[2]].first.second!=command[1])
         return "File does not belong to Group:"+command[1];
-        return file_details[command[2]].second.first+":"+file_details[command[2]].second.second;
+        return file_details[command[2]].second.first+" "+file_details[command[2]].second.second+"#";
     }
     else
     if(command[0]=="logout"&&command.size()==2)

@@ -8,17 +8,94 @@
 #include<netinet/in.h> //struct sockaddr_in
 #include<string.h>
 #include<netdb.h> //gethostbyname()
+#include<fstream> // ifstream
+// #define CHUNK_SIZE 16384    //16KB
+#define CHUNK_SIZE 1024    //1KB
 using namespace std;
 string id="",pswd="",group="";
 string my_ip="",my_port="";
 string tracker_ip="",tracker_port="";
-unordered_map<string,string> file; //filename->path
+unordered_map<string,string> file_details; //filename->path
 int online=0;
 
 void print_trackers(vector<pair<string,string>> trackers)
 {
     for(int i=0;i<trackers.size();i++)
     cout<<trackers[i].first<<":"<<trackers[i].second<<endl;
+}
+// void* execute_commands(void* client_socket)
+void execute_commands(int client_fd)
+{
+    char buffer[1024];
+    // int client_fd=*(int *)client_socket;
+    bzero(buffer,1024);
+    int n=read(client_fd,buffer,1024);
+    // cout<<"Msg from other peer:"<<buffer<<":END"<<endl;
+    string filepath=buffer;
+    bzero(buffer,1000);
+    ifstream f(file_details[filepath]);
+    ifstream f_temp(file_details[filepath]);
+    long long start,end,size;
+    start=f_temp.tellg();
+    f_temp.seekg(0,ios::end);
+    end=f_temp.tellg();
+    size=end-start;
+    int chunks=(size/CHUNK_SIZE)+1;
+    strcpy(buffer,to_string(chunks).c_str());
+    n=write(client_fd,buffer,1000);
+    char f_buffer[CHUNK_SIZE];
+    for(int i=0;i<chunks;i++)
+    {
+        if(i==chunks-1)
+        {
+            bzero(f_buffer,CHUNK_SIZE);
+            long long last_chunk=size-(chunks-1)*CHUNK_SIZE;
+            f.read(f_buffer,last_chunk);
+            n=write(client_fd,f_buffer,last_chunk);
+            continue;
+        }
+        f.read(f_buffer,CHUNK_SIZE);
+        n=write(client_fd,f_buffer,CHUNK_SIZE);
+    }
+    if (n < 0) perror("Error while writing to socket");
+}
+void listen_from_peer()
+{
+     /* Establishing connection */
+     
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0); //Socket Creation
+    if(sockfd<0)
+    {
+        perror("Error while opening socket.\n");
+        exit(0);
+    }
+    struct sockaddr_in serv_addr, cli_addr;
+    bzero((char *) &serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family=AF_INET;
+    serv_addr.sin_addr.s_addr=INADDR_ANY;
+    serv_addr.sin_port=htons(atoi(my_port.c_str()));
+    if(bind(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr))<0) //Binding
+    {
+        perror("Error while binding.\n");
+        exit(0);
+    }
+    listen(sockfd,8); //Listening
+    socklen_t client_len=sizeof(cli_addr);
+
+    //Accepting requests from other peers and executing them parallely
+    while(1)
+    {
+        int newsockfd = accept(sockfd,(struct sockaddr *) &cli_addr,&client_len); //Accepting
+        if(sockfd<0)
+        {
+            perror("Error while accepting.\n");
+            exit(0);
+        }
+        // pthread_t client_thread;
+        int client_socket=newsockfd;
+        // pthread_create(&client_thread,NULL,&execute_commands,&client_socket);
+        execute_commands(client_socket);
+    }
 }
 int main(int argc,char *argv[])
 {
@@ -62,6 +139,12 @@ int main(int argc,char *argv[])
         }
         my_port.push_back(word[i]);
     }
+
+
+    thread peer_server_thread(listen_from_peer);
+	peer_server_thread.detach();
+    // listen_from_peer();
+
     cout<<"My IP:PORT->"<<my_ip<<":"<<my_port<<endl;
     int sockfd = socket(AF_INET, SOCK_STREAM, 0); //Socket Creation
     if(sockfd<0)
@@ -312,6 +395,20 @@ int main(int argc,char *argv[])
         else
         if(command[0]=="upload_file")
         {
+            string filename="",filepath=command[1];
+            bool isCorrect=false;
+            for(int i=filepath.length()-1;i>=0;i--)
+            {
+                if(filepath[i]=='/')
+                {
+                    isCorrect=true;
+                    break;
+                }
+                filename.insert(0,1,filepath[i]);
+            }
+            if(!isCorrect)
+            cout<<"Incorrect Filename/path.";
+            else
             if(online==0)
             {
                 cout<<"You are not logged in,Please login.\n";
@@ -322,7 +419,11 @@ int main(int argc,char *argv[])
                 cout<<"Invalid arguments\n";
             }
             else
+            if(file_details.find(filename)!=file_details.end())
+            cout<<filename+" already uploaded with PATH:"+file_details[filename];
+            else
             {
+                file_details[filename]=command[1];
                 strcpy(buffer,(inp+" "+id+" "+my_ip+" "+my_port).c_str());
                 int n=write(sockfd,buffer,strlen(buffer));
                 if (n < 0) 
@@ -368,7 +469,63 @@ int main(int argc,char *argv[])
                     perror("Error while reading from socket\n");
                     exit(0);
                 }
+                if(buffer[strlen(buffer)-1]!='#')   //received error log
                 printf("Msg from Server:%s\n",buffer);
+                else    //received success msg with peer ip,port having # as indicator in end
+                {
+                    string peer_ip="",peer_port="";
+                    for(int i=0;i<strlen(buffer);i++)
+                    {
+                        if(buffer[i]==' ')
+                        {
+                            peer_ip=peer_port;
+                            peer_port="";
+                            continue;
+                        }
+                        peer_port.push_back(buffer[i]);
+                    }
+                    peer_port.pop_back();   //removing '#' indicator
+                    int sockfd_peer = socket(AF_INET, SOCK_STREAM, 0); //Socket Creation
+                    if(sockfd_peer<0)
+                    {
+                        perror("Error while opening socket.\n");
+                        exit(0);
+                    }
+                    struct hostent *server_peer=gethostbyname(peer_ip.c_str());
+                    if(server_peer==NULL) 
+                    {
+                        perror("Error,Host not found.\n");
+                        exit(0);
+                    }
+                    struct sockaddr_in serv_addr_peer;
+                    bzero((char *) &serv_addr_peer,sizeof(serv_addr_peer));
+                    serv_addr_peer.sin_family = AF_INET;
+                    bcopy((char *)server_peer->h_addr,(char *)&serv_addr_peer.sin_addr.s_addr,server->h_length);
+                    serv_addr_peer.sin_port = htons(stoi(peer_port));
+                    if (connect(sockfd_peer,(struct sockaddr *)&serv_addr_peer,sizeof(serv_addr_peer))<0) 
+                    {
+                        perror("ERROR connecting");
+                        exit(0);
+                    }
+                    strcpy(buffer,command[2].c_str());
+                    cout<<"Sending:"<<buffer<<endl;
+                    int n=write(sockfd_peer,buffer,strlen(buffer)); //sending filepath
+                    if(n<0) perror("ERROR writing to socket");
+                    bzero(buffer,1024);
+                    n=read(sockfd_peer,buffer,1024); //receiving chunk size/error
+                    if (n < 0) perror("ERROR reading from socket");
+                    printf("Msg from other peer:%s\n",buffer);
+                    char f_buffer[CHUNK_SIZE];
+                    fstream f;
+                    string filepath=command[3]+'/'+command[2];
+                    f.open(filepath.c_str(),fstream::out);
+                    for(int i=0;i<stoi(buffer);i++)
+                    {
+                        n=read(sockfd_peer,f_buffer,CHUNK_SIZE);
+                        f.write(f_buffer,CHUNK_SIZE);
+                    }
+                    // f.close();
+                }
             }
         }
         else
