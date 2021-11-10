@@ -9,8 +9,10 @@
 #include<string.h>
 #include<netdb.h> //gethostbyname()
 #include<fstream> // ifstream
-// #define CHUNK_SIZE 16384    //16KB
-#define CHUNK_SIZE 1024    //1KB
+// #define CHUNK_SIZE 1048576    //1MB
+// #define CHUNK_SIZE 524288    //512KB
+#define CHUNK_SIZE 16384    //16KB
+// #define CHUNK_SIZE 1024    //1KB
 using namespace std;
 string id="",pswd="",group="";
 string my_ip="",my_port="";
@@ -40,20 +42,34 @@ void execute_commands(int client_fd)
     f_temp.seekg(0,ios::end);
     end=f_temp.tellg();
     size=end-start;
-    int chunks=(size/CHUNK_SIZE)+1;
+    long long int last_chunk=size%CHUNK_SIZE;
+    int chunks=(size/CHUNK_SIZE);
+    if(last_chunk!=0)
+    chunks++;
+    cout<<"---------------------------------------------------------------------------\n";
+    cout<<"Chunks:"<<chunks<<",Last chunk:"<<last_chunk<<",Size:"<<size<<".\n";
+
     strcpy(buffer,to_string(chunks).c_str());
+    // cout<<"Chunks:"<<buffer<<".\n";
     n=write(client_fd,buffer,1000);
+
+    strcpy(buffer,to_string(last_chunk).c_str());
+    // cout<<"Last Chunk:"<<buffer<<".\n";
+    n=write(client_fd,buffer,1000);
+
     char f_buffer[CHUNK_SIZE];
     for(int i=0;i<chunks;i++)
     {
         if(i==chunks-1)
-        {
+        {  
+            
             bzero(f_buffer,CHUNK_SIZE);
-            long long last_chunk=size-(chunks-1)*CHUNK_SIZE;
             f.read(f_buffer,last_chunk);
+            // cout<<"Last Chunk:"<<f_buffer<<":"<<"Strlen:"<<strlen(f_buffer)<<":"<<endl;
             n=write(client_fd,f_buffer,last_chunk);
-            continue;
+            break;
         }
+        bzero(f_buffer,CHUNK_SIZE);
         f.read(f_buffer,CHUNK_SIZE);
         n=write(client_fd,f_buffer,CHUNK_SIZE);
     }
@@ -511,18 +527,41 @@ int main(int argc,char *argv[])
                     cout<<"Sending:"<<buffer<<endl;
                     int n=write(sockfd_peer,buffer,strlen(buffer)); //sending filepath
                     if(n<0) perror("ERROR writing to socket");
+
                     bzero(buffer,1024);
                     n=read(sockfd_peer,buffer,1024); //receiving chunk size/error
                     if (n < 0) perror("ERROR reading from socket");
-                    printf("Msg from other peer:%s\n",buffer);
+                    printf("Chunks:%s\n",buffer);
+                    int chunks=stoi(buffer);
+
+                    bzero(buffer,1024);
+                    n=read(sockfd_peer,buffer,1024);
+                    printf("Last Chunk:%s\n",buffer);
+                    long long int last_chunck=stol(buffer); //receiving last chunk size
+
                     char f_buffer[CHUNK_SIZE];
                     fstream f;
                     string filepath=command[3]+'/'+command[2];
                     f.open(filepath.c_str(),fstream::out);
-                    for(int i=0;i<stoi(buffer);i++)
+                    for(int i=0;i<chunks;i++)
                     {
-                        n=read(sockfd_peer,f_buffer,CHUNK_SIZE);
-                        f.write(f_buffer,CHUNK_SIZE);
+                        if(i==chunks-1)
+                        { 
+                            cout<<"Last Chunck:"<<last_chunck<<endl;
+                            bzero(f_buffer,CHUNK_SIZE);
+                            n=read(sockfd_peer,f_buffer,last_chunck);
+                            f.write(f_buffer,last_chunck);
+                            break;
+                        }
+                        bzero(f_buffer,CHUNK_SIZE);
+                        long long t=0;
+                        while(t<CHUNK_SIZE)
+                        {
+                            n=read(sockfd_peer,f_buffer,CHUNK_SIZE);
+                            t+=n;
+                            f.write(f_buffer,CHUNK_SIZE);
+                        }
+                        
                     }
                     // f.close();
                 }
